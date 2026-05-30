@@ -44,9 +44,9 @@ public class RunTournament {
 
         List<AbstractPlayer> agents = Arrays.asList(
                 new NeuralMCTSPlayer(weights, featureClass),  // already named MCTS-NeuralRollout
-                named(new MCTSPlayer(), "MCTS-RandomRollout"),
-                named(new BasicMCTSPlayer(), "BasicMCTS"),
-                named(new RandomPlayer(), "Random")
+                new MCTSPlayer(),
+                new BasicMCTSPlayer(),
+                new RandomPlayer()
         );
 
         Map<RunArg, Object> config = RunArg.parseConfig(

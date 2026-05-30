@@ -37,7 +37,7 @@ enum FeatureExtractors {
   //  ExplodingKittens( ExplodingKittensFeatures.class, null),
     LoveLetter(LLStateFeaturesReduced.class, null),
     Stratego(StrategoFeatures.class, null),
-    SushiGo(null, SGFeatures.class),
+    SushiGo(SGFeatures.class, SGFeatures.class),
     TicTacToe(TTTFeatures.class, TTTFeatures.class),
     Diamant(DiamantFeatures.class, DiamantFeatures.class),
 	PowerGrid(PowerGridFeatures.class, null); //gets both the JSON and Vector observation 
