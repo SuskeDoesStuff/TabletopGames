@@ -14,23 +14,21 @@ import utilities.ActionTreeNode;
 import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
- * A GAME-AGNOSTIC rollout policy backed by a PyTAG PPO (PPONet) MLP.
+ * Game-agnostic rollout policy backed by a PyTAG PPO (PPONet) MLP.
  *
- * Nothing here is game-specific. Two things are injected at construction:
- *   - weightsPath:        the JSON produced by export_weights.py
- *   - featureExtractor:   the fully-qualified IStateFeatureVector class name
- *                         (MUST match the one PyTAG used to train this game,
- *                          e.g. games.tictactoe.TTTFeatures, games.diamant.DiamantFeatures,
- *                          games.sushigo.SGFeatures)
+ * Action selection is SOFTMAX SAMPLING over legal leaves by default, which
+ * matches how PPO's actor was trained (Categorical(logits) with an entropy
+ * bonus). This restores per-rollout trajectory variance - which MCTS depends
+ * on - and respects the policy's actual confidence: confident logits still
+ * mostly pick the best action, uncertain logits explore alternatives.
  *
- * The action mapping uses the SAME ITreeActionSpace machinery PyTAG used during
- * training (initActionTree -> updateActionTree -> getLeafNodes), so the network's
- * output index i lines up with leaf i exactly. No per-game action code, no casts.
+ * Argmax is available via the 3-arg constructor for explicit A/B testing
+ * (greedy=true).
  *
- * Only handles MLP policies (any number of hidden layers). For CNN/LSTM policies,
- * use ONNX instead.
+ * Only handles MLP policies. For CNN/LSTM, use ONNX instead.
  */
 public class NeuralRolloutPlayer extends AbstractPlayer {
 
@@ -39,18 +37,25 @@ public class NeuralRolloutPlayer extends AbstractPlayer {
     private final double[][] actorW;
     private final double[] actorB;
     private final IStateFeatureVector features;
+    private final boolean greedy;
+    private final Random rng;
 
-    // kept so copy() can re-create an identical instance
     private final String weightsPath;
     private final String featureClass;
-
-    // cached action tree (structure is fixed for the whole game)
     private transient ActionTreeNode treeRoot = null;
 
+    // Two-arg ctor: defaults to sampling (the recommended setting).
     public NeuralRolloutPlayer(String weightsPath, String featureClass) {
-        super(new PlayerParameters(), "NeuralRollout");
+        this(weightsPath, featureClass, false);
+    }
+
+    // Three-arg ctor: explicit greedy flag for argmax A/B testing.
+    public NeuralRolloutPlayer(String weightsPath, String featureClass, boolean greedy) {
+        super(new PlayerParameters(), "NeuralRollout" + (greedy ? "-Greedy" : "-Sample"));
         this.weightsPath = weightsPath;
         this.featureClass = featureClass;
+        this.greedy = greedy;
+        this.rng = new Random(getParameters().getRandomSeed());
         try {
             this.features = (IStateFeatureVector)
                     Class.forName(featureClass).getConstructor().newInstance();
@@ -79,33 +84,65 @@ public class NeuralRolloutPlayer extends AbstractPlayer {
         double[] obs = features.doubleVector(state, state.getCurrentPlayer());
         double[] logits = forwardActor(obs);
 
+        int n = Math.min(leaves.size(), logits.length);
+        int chosen = greedy ? argmaxLegal(leaves, logits, n)
+                            : sampleSoftmaxLegal(leaves, logits, n);
+        if (chosen >= 0 && leaves.get(chosen).getAction() != null) {
+            return leaves.get(chosen).getAction();
+        }
+        return actions.get(0); // safety fallback (should not trigger)
+    }
+
+    // Greedy: highest-logit legal leaf.
+    private static int argmaxLegal(List<ActionTreeNode> leaves, double[] logits, int n) {
         int best = -1;
         double bestLogit = Double.NEGATIVE_INFINITY;
-        int n = Math.min(leaves.size(), logits.length);
         for (int i = 0; i < n; i++) {
-            // getValue()==1 marks a legal leaf -> implicit action masking
             if (leaves.get(i).getValue() == 1 && logits[i] > bestLogit) {
                 bestLogit = logits[i];
                 best = i;
             }
         }
-        if (best >= 0 && leaves.get(best).getAction() != null) {
-            return leaves.get(best).getAction();
-        }
-        return actions.get(0); // safety fallback (should not trigger)
+        return best;
     }
 
-    // obs -> [Linear, ReLU] x N -> actor Linear (raw logits)
+    // Softmax sample over LEGAL leaves only. Numerically stable: subtract max
+    // logit before exp(), then walk a uniform * sum threshold.
+    private int sampleSoftmaxLegal(List<ActionTreeNode> leaves, double[] logits, int n) {
+        double maxL = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < n; i++) {
+            if (leaves.get(i).getValue() == 1 && logits[i] > maxL) maxL = logits[i];
+        }
+        if (maxL == Double.NEGATIVE_INFINITY) return -1; // no legal leaf
+
+        double[] probs = new double[n];
+        double sum = 0.0;
+        for (int i = 0; i < n; i++) {
+            if (leaves.get(i).getValue() == 1) {
+                probs[i] = Math.exp(logits[i] - maxL);
+                sum += probs[i];
+            }
+        }
+        double threshold = rng.nextDouble() * sum;
+        double acc = 0.0;
+        for (int i = 0; i < n; i++) {
+            if (leaves.get(i).getValue() != 1) continue;
+            acc += probs[i];
+            if (acc >= threshold) return i;
+        }
+        return -1; // unreachable except for FP edge cases
+    }
+
+    // obs -> [Linear, ReLU] x N -> actor Linear -> logits
     private double[] forwardActor(double[] obs) {
         double[] x = obs;
         for (int l = 0; l < hiddenW.size(); l++) {
             x = linear(x, hiddenW.get(l), hiddenB.get(l));
-            for (int i = 0; i < x.length; i++) if (x[i] < 0) x[i] = 0.0; // ReLU
+            for (int i = 0; i < x.length; i++) if (x[i] < 0) x[i] = 0.0;
         }
         return linear(x, actorW, actorB);
     }
 
-    // y = W x + b  (W stored [out][in], exactly as PyTorch saves it -> no transpose)
     private static double[] linear(double[] x, double[][] w, double[] b) {
         double[] y = new double[w.length];
         for (int i = 0; i < w.length; i++) {
@@ -131,6 +168,6 @@ public class NeuralRolloutPlayer extends AbstractPlayer {
 
     @Override
     public NeuralRolloutPlayer copy() {
-        return new NeuralRolloutPlayer(weightsPath, featureClass);
+        return new NeuralRolloutPlayer(weightsPath, featureClass, greedy);
     }
 }
