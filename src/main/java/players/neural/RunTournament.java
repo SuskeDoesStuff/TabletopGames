@@ -43,10 +43,11 @@ public class RunTournament {
         int budgetPerMove = 1000;
 
         List<AbstractPlayer> agents = Arrays.asList(
-                new NeuralMCTSPlayer(weights, featureClass),  // already named MCTS-NeuralRollout
-                new MCTSPlayer(),
-                new BasicMCTSPlayer(),
-                new RandomPlayer()
+        new NeuralMCTSPlayer(weights, featureClass),
+        new MCTSPlayer(),
+        new BasicMCTSPlayer(),
+        new RandomPlayer(),
+        new NeuralRolloutPlayer(weights, featureClass)    // <-- add this line
         );
 
         Map<RunArg, Object> config = RunArg.parseConfig(
