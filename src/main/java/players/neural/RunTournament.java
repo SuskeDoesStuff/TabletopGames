@@ -48,7 +48,8 @@ public class RunTournament {
         new BasicMCTSPlayer(),
         new RandomPlayer(),
         new NeuralRolloutPlayer(weights, featureClass),
-        new NeuralCriticMCTSPlayer(weights, featureClass)   // <-- add this line
+        new NeuralCriticMCTSPlayer(weights, featureClass),
+        new NeuralBothMCTSPlayer(weights, featureClass)   // <-- add this line
         );
 
         Map<RunArg, Object> config = RunArg.parseConfig(
