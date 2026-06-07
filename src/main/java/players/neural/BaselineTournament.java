@@ -4,7 +4,7 @@ import core.AbstractPlayer;
 import evaluation.RunArg;
 import evaluation.tournaments.RoundRobinTournament;
 import games.GameType;
-import players.basicmcts.BasicMCTSPlayer;
+import players.basicMCTS.BasicMCTSPlayer;
 import players.mcts.MCTSPlayer;
 import players.simple.RandomPlayer;
 
