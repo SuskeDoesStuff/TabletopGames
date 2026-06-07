@@ -4,10 +4,11 @@ import core.AbstractPlayer;
 import evaluation.RunArg;
 import evaluation.tournaments.RoundRobinTournament;
 import games.GameType;
-import players.basicMCTS.BasicMCTSPlayer;
+import players.basicmcts.BasicMCTSPlayer;
 import players.mcts.MCTSPlayer;
 import players.simple.RandomPlayer;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -15,38 +16,65 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Stripped-down baseline tournament for investigating MCTS-variant differences
- * without any neural agents in the mix.
+ * Diagnostic baseline tournament with optional explicit budget override.
  *
- * Three agents only:
- *   1. MCTSPlayer       (the configurable MCTS in TAG)
- *   2. BasicMCTSPlayer  (a simpler MCTS implementation in TAG)
- *   3. RandomPlayer     (uniform-random baseline)
+ * If no budget argument is passed, each MCTS agent uses its own default
+ * parameters (which may differ between MCTSPlayer and BasicMCTSPlayer —
+ * that's precisely what we want to diagnose).
+ *
+ * If a budget argument is passed (4th positional arg), both MCTS agents are
+ * set to that explicit budget and budgetType=BUDGET_FM_CALLS, so the only
+ * difference between them is their internal MCTS algorithm.
  *
  * Usage:
- *   java -cp target/TAG.jar players.neural.BaselineTournament <GameType> [matchups] [nPlayers]
+ *   java -cp target/TAG.jar players.neural.BaselineTournament <GameType> [matchups] [nPlayers] [budget]
  *
- * Example:
+ * Examples:
  *   java -cp target/TAG.jar players.neural.BaselineTournament Connect4 1500 2
+ *     -> Default budgets (whatever each agent ships with).
+ *
+ *   java -cp target/TAG.jar players.neural.BaselineTournament Connect4 1500 2 4000
+ *     -> Both MCTS agents forced to budget=4000 FM calls.
  */
 public class BaselineTournament {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 1) {
-            System.err.println("Usage: BaselineTournament <GameType> [matchups] [nPlayers]");
-            System.err.println("  GameType: e.g., Connect4, Diamant, TicTacToeGame");
-            System.err.println("  matchups: total tournament games (default 1500)");
+            System.err.println("Usage: BaselineTournament <GameType> [matchups] [nPlayers] [budget]");
+            System.err.println("  matchups: total games (default 1500)");
             System.err.println("  nPlayers: seats per game (default 2)");
+            System.err.println("  budget:   explicit budget for both MCTS agents");
+            System.err.println("            (default: each agent's own default)");
             System.exit(1);
         }
 
         GameType game = GameType.valueOf(args[0]);
         int matchups = args.length > 1 ? Integer.parseInt(args[1]) : 1500;
         int nPlayers = args.length > 2 ? Integer.parseInt(args[2]) : 2;
+        int budget   = args.length > 3 ? Integer.parseInt(args[3]) : -1;
+
+        MCTSPlayer mcts = new MCTSPlayer();
+        BasicMCTSPlayer basic = new BasicMCTSPlayer();
+
+        System.out.println("=== Parameter inspection (before any override) ===");
+        printBudgetInfo("MCTSPlayer      ", mcts.getParameters());
+        printBudgetInfo("BasicMCTSPlayer ", basic.getParameters());
+        System.out.println();
+
+        if (budget > 0) {
+            System.out.println("=== Applying explicit override: budget=" + budget + " ===");
+            applyBudgetOverride(mcts.getParameters(), budget);
+            applyBudgetOverride(basic.getParameters(), budget);
+            printBudgetInfo("MCTSPlayer      ", mcts.getParameters());
+            printBudgetInfo("BasicMCTSPlayer ", basic.getParameters());
+            System.out.println();
+        } else {
+            System.out.println("(No --budget override; each agent uses its own defaults)\n");
+        }
 
         List<AbstractPlayer> agents = new ArrayList<>();
-        agents.add(new MCTSPlayer());
-        agents.add(new BasicMCTSPlayer());
+        agents.add(mcts);
+        agents.add(basic);
         agents.add(new RandomPlayer());
 
         Map<RunArg, Object> config = RunArg.parseConfig(new String[]{
@@ -59,5 +87,49 @@ public class BaselineTournament {
         RoundRobinTournament tournament = new RoundRobinTournament(
                 agents, game, nPlayers, null, config);
         tournament.run();
+    }
+
+    /**
+     * Reflect on the params object to read & print the budget/budgetType fields.
+     * Both MCTSParams and BasicMCTSParams extend PlayerParameters which has these
+     * fields publicly. Reflection avoids hard-coding which params subclass we have.
+     */
+    private static void printBudgetInfo(String label, Object params) {
+        try {
+            Field budgetField = params.getClass().getField("budget");
+            Field budgetTypeField = params.getClass().getField("budgetType");
+            System.out.printf("  %s class=%s, budget=%s, budgetType=%s%n",
+                    label,
+                    params.getClass().getSimpleName(),
+                    budgetField.get(params),
+                    budgetTypeField.get(params));
+        } catch (NoSuchFieldException e) {
+            System.out.printf("  %s class=%s, could not find 'budget' or 'budgetType' field%n",
+                    label, params.getClass().getSimpleName());
+        } catch (IllegalAccessException e) {
+            System.out.printf("  %s field access error: %s%n", label, e.getMessage());
+        }
+    }
+
+    /**
+     * Set both budget value and budgetType. Uses setParameterValue so it goes
+     * through TAG's tunable-parameter system. Tolerates failure on budgetType
+     * if the agent's params don't expose it via that mechanism.
+     */
+    private static void applyBudgetOverride(Object params, int newBudget) {
+        try {
+            params.getClass().getMethod("setParameterValue", String.class, Object.class)
+                    .invoke(params, "budget", newBudget);
+        } catch (Exception e) {
+            System.err.println("Could not set 'budget' on " +
+                    params.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+        try {
+            params.getClass().getMethod("setParameterValue", String.class, Object.class)
+                    .invoke(params, "budgetType", "BUDGET_FM_CALLS");
+        } catch (Exception e) {
+            // Many TAG params accept enum-as-string here; if not, leave default
+            // untouched and let the user see in the diagnostic printout.
+        }
     }
 }
