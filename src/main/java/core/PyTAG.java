@@ -13,6 +13,7 @@ import games.powergrid.PowerGridFeatures;
 import games.powergrid.PowerGridGameState;
 import games.powergrid.PowerGridParameters;
 import games.powergrid.components.PowerGridCard;
+import games.connect4.Connect4StateVector;
 import games.stratego.StrategoFeatures;
 import games.sushigo.SGFeatures;
 import games.tictactoe.TTTFeatures;
@@ -38,6 +39,7 @@ enum FeatureExtractors {
     LoveLetter(LLStateFeaturesReduced.class, null),
     Stratego(StrategoFeatures.class, null),
     SushiGo(null, SGFeatures.class),
+    Connect4(Connect4StateVector.class, null),
     TicTacToe(TTTFeatures.class, TTTFeatures.class),
     Diamant(DiamantFeatures.class, DiamantFeatures.class),
 	PowerGrid(PowerGridFeatures.class, null); //gets both the JSON and Vector observation 

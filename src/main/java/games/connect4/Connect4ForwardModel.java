@@ -6,6 +6,8 @@ import core.actions.SetGridValueAction;
 import core.components.BoardNode;
 import core.components.GridBoard;
 import core.forwardModels.SequentialActionForwardModel;
+import core.interfaces.ITreeActionSpace;
+import utilities.ActionTreeNode;
 import utilities.Pair;
 
 import java.util.ArrayList;
@@ -14,7 +16,20 @@ import java.util.LinkedList;
 import java.util.List;
 
 
-public class Connect4ForwardModel extends SequentialActionForwardModel {
+/**
+ * Connect4 forward model.
+ *
+ * Extends SequentialActionForwardModel for the game flow, and implements
+ * ITreeActionSpace so that PyTAG (and the NeuralRolloutPlayer) can map
+ * policy-network logits to legal actions via a fixed-shape action tree.
+ *
+ * Action tree layout: a flat tree with one leaf per column (gridSize children
+ * of root). A column is marked legal (value=1) when it has at least one empty
+ * cell; the leaf's action is SetGridValueAction at the lowest empty row of
+ * that column. Leaf index = column index, so a network with `gridSize` output
+ * logits maps directly onto the columns.
+ */
+public class Connect4ForwardModel extends SequentialActionForwardModel implements ITreeActionSpace {
 
     @Override
     protected void _setup(AbstractGameState firstState) {
@@ -60,6 +75,52 @@ public class Connect4ForwardModel extends SequentialActionForwardModel {
         }
         super._afterAction(currentState, action);
     }
+
+    // -------------------------------------------------------------------
+    // ITreeActionSpace — used by PyTAG / NeuralRolloutPlayer for mapping
+    // network logits to legal actions.
+    // -------------------------------------------------------------------
+
+    @Override
+    public ActionTreeNode initActionTree(AbstractGameState gameState) {
+        int gridSize = ((Connect4GameParameters) gameState.getGameParameters()).gridSize;
+        ActionTreeNode root = new ActionTreeNode(0, "root");
+        for (int col = 0; col < gridSize; col++) {
+            root.addChild(0, "col" + col);
+        }
+        return root;
+    }
+
+    @Override
+    public ActionTreeNode updateActionTree(ActionTreeNode root, AbstractGameState gameState) {
+        root.resetTree();
+        if (!gameState.isNotTerminal()) return root;
+
+        Connect4GameState c4gs = (Connect4GameState) gameState;
+        int player    = c4gs.getCurrentPlayer();
+        int width     = c4gs.gridBoard.getWidth();
+        int height    = c4gs.gridBoard.getHeight();
+        int boardId   = c4gs.gridBoard.getComponentID();
+        int pieceId   = Connect4Constants.playerMapping.get(player).getComponentID();
+        List<ActionTreeNode> children = root.getChildren();
+
+        for (int x = 0; x < width; x++) {
+            // lowest empty cell in column x is the legal drop
+            for (int y = height - 1; y >= 0; y--) {
+                if (c4gs.gridBoard.getElement(x, y).getComponentName().equals(Connect4Constants.emptyCell)) {
+                    ActionTreeNode leaf = children.get(x);
+                    leaf.setAction(new SetGridValueAction(boardId, x, y, pieceId));
+                    leaf.setValue(1);
+                    break;
+                }
+            }
+        }
+        return root;
+    }
+
+    // -------------------------------------------------------------------
+    // Win/draw detection — unchanged from the original implementation.
+    // -------------------------------------------------------------------
 
     /**
      * Checks if the game ended.
