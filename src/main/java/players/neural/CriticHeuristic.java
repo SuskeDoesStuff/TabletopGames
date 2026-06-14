@@ -22,8 +22,10 @@ import java.util.List;
  * actor head and only runs trunk -> critic.
  *
  * The critic was trained from the deciding player's perspective (using the
- * same feature extractor) to predict expected outcome in [-1, 1]. We feed the
- * obs from the evaluated player's perspective and return that prediction.
+ * same feature extractor) to predict expected outcome in [-1, 1]. The output
+ * is linearly rescaled to [0, 1] and terminal states return WinOnlyHeuristic's
+ * exact values, so this heuristic is scale-identical to the tuned baseline's
+ * WinOnlyHeuristic and differs only on non-terminal (network-evaluated) states.
  */
 public class CriticHeuristic implements IStateHeuristic {
 
@@ -54,6 +56,30 @@ public class CriticHeuristic implements IStateHeuristic {
 
     @Override
     public double evaluateState(AbstractGameState gs, int playerId) {
+        // TERMINAL STATES: return the actual game result, never the network.
+        // The critic only knows board patterns; it does not reliably recognise
+        // that a game is over. Without this check, MCTS cannot distinguish an
+        // actual win from a mid-game position (a won state might score 0.3
+        // while a speculative branch scores 0.6), which is fatal in tactical
+        // games like Connect4. This mirrors TAG's own heuristics (e.g.
+        // WinOnlyHeuristic), which all dispatch on getPlayerResults() first.
+        // Terminal values mirror WinOnlyHeuristic EXACTLY (same [0,1] scale), so
+        // agents using this heuristic and agents using WinOnlyHeuristic back up
+        // identical values for identical outcomes. The only remaining difference
+        // between such agents is the non-terminal (network) evaluations.
+        switch (gs.getPlayerResults()[playerId]) {
+            case WIN_GAME:
+                return 1.0;
+            case DRAW_GAME:
+            case TIMEOUT:
+                return 0.5;
+            case LOSE_GAME:
+            case GAME_END:
+            case DISQUALIFY:
+                return 0.0;
+            default:
+                break; // GAME_ONGOING -> ask the critic
+        }
         double[] obs = features.doubleVector(gs, playerId);
         double[] x = obs;
         for (int l = 0; l < hiddenW.size(); l++) {
@@ -61,12 +87,27 @@ public class CriticHeuristic implements IStateHeuristic {
             for (int i = 0; i < x.length; i++) if (x[i] < 0) x[i] = 0.0;
         }
         double[] v = linear(x, criticW, criticB);
-        // critic head outputs a single scalar; clamp lightly to stay in [-1, 1]
-        // since MCTS uses minValue/maxValue for normalisation.
+        // The critic head was trained on returns in [-1, 1] (PyTAG rewards are
+        // +/-1). Clamp to that range, then linearly rescale to [0, 1] so the
+        // heuristic's scale matches WinOnlyHeuristic: 1 = certain win,
+        // 0.5 = neutral/draw-ish, 0 = certain loss. A linear map preserves all
+        // orderings; this is purely for scale consistency with the baseline.
         double raw = v[0];
         if (raw > 1.0) raw = 1.0;
         else if (raw < -1.0) raw = -1.0;
-        return raw;
+        return (raw + 1.0) / 2.0;
+    }
+
+    // Declared bounds must match the values actually returned. These mirror
+    // WinOnlyHeuristic's bounds so MCTS normalisation treats both identically.
+    @Override
+    public double minValue() {
+        return 0.0;
+    }
+
+    @Override
+    public double maxValue() {
+        return 1.0;
     }
 
     private static double[] linear(double[] x, double[][] w, double[] b) {

@@ -1,0 +1,55 @@
+package players.neural;
+
+import core.AbstractPlayer;
+import core.Game;
+import evaluation.listeners.IGameListener;
+import evaluation.metrics.Event;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Lightweight per-game logger: prints a ONE-LINE header before every match
+ * showing who is playing, and a full parameter block ONLY the first time each
+ * agent name is seen. Output goes to System.out (tee'd into tournament.txt).
+ *
+ * The full up-front roster is printed separately by TunedTournament before the
+ * tournament starts (see printRoster there) — this listener is just the
+ * per-match marker so you can tie ComputationTimes / results rows back to
+ * specific games while scrolling the log.
+ */
+public class GameParamsLogger implements IGameListener {
+
+    private Game game;
+    private int gameCounter = 0;
+    private final Set<String> seen = new HashSet<>();
+
+    @Override
+    public void onEvent(Event event) {
+        if (event.type != Event.GameEvent.ABOUT_TO_START) return;
+        if (game == null) return;
+
+        gameCounter++;
+        List<AbstractPlayer> players = game.getPlayers();
+
+        StringBuilder line = new StringBuilder();
+        line.append("Game ").append(gameCounter).append(": ");
+        for (int i = 0; i < players.size(); i++) {
+            if (i > 0) line.append(" vs ");
+            line.append(players.get(i).toString());
+        }
+        System.out.println(line);
+
+        // Full param dump only for agents not seen before
+        for (AbstractPlayer p : players) {
+            if (seen.add(p.toString())) {
+                System.out.println(ParamFormat.block(p, "    "));
+            }
+        }
+    }
+
+    @Override public void report() {}
+    @Override public void setGame(Game game) { this.game = game; }
+    @Override public Game getGame() { return game; }
+}

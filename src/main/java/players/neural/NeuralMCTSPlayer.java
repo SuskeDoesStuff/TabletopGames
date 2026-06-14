@@ -5,21 +5,16 @@ import players.mcts.MCTSParams;
 import players.mcts.MCTSPlayer;
 
 /**
- * An MCTS player that uses a trained PyTAG policy as its rollout strategy.
+ * MCTS player using a trained PPO policy as the rollout strategy.
  *
- * It IS a full MCTS agent (selection / expansion / rollout / backup); the only
- * change from the stock MCTSPlayer is that random playouts are replaced by the
- * neural NeuralRolloutPlayer. Everything else about the search is unchanged, so
- * comparing this against a plain MCTSPlayer isolates exactly one variable: the
- * rollout policy.
+ * Two constructors:
+ *   1. NeuralMCTSPlayer(weights, features) — uses default MCTSParams. Back-compat.
+ *   2. NeuralMCTSPlayer(baseParams, weights, features) — starts from baseParams
+ *      (typically a tuned game-specific config loaded from JSON), copies it, and
+ *      applies only the rollout-strategy override. All other tuning is preserved.
  *
- * Self-contained: the rollout policy is specified as an INLINE JSON spec on the
- * rolloutClass parameter, so there is no separate config file to manage and the
- * setting survives MCTS's internal parameter resets.
- *
- *   new NeuralMCTSPlayer("/abs/ttt_weights.txt", "games.tictactoe.TTTFeatures")
- *   new NeuralMCTSPlayer("/abs/diamant_weights.txt", "games.diamant.DiamantFeatures")
- *   new NeuralMCTSPlayer("/abs/sushigo_weights.txt", "games.sushigo.SGFeatures")
+ * The second constructor is what TunedTournament uses to ensure plain MCTSPlayer
+ * and the neural variants differ ONLY in the rollout-strategy injection.
  */
 public class NeuralMCTSPlayer extends MCTSPlayer {
 
@@ -27,28 +22,33 @@ public class NeuralMCTSPlayer extends MCTSPlayer {
     private final String featureClass;
 
     public NeuralMCTSPlayer(String weightsPath, String featureClass) {
-        super(buildParams(weightsPath, featureClass), "MCTS-NeuralRollout");
+        this(new MCTSParams(), weightsPath, featureClass);
+    }
+
+    public NeuralMCTSPlayer(MCTSParams baseParams, String weightsPath, String featureClass) {
+        super(applyNeuralRollout(baseParams, weightsPath, featureClass), "MCTS-NeuralRollout");
         this.weightsPath = weightsPath;
         this.featureClass = featureClass;
     }
 
-    private static MCTSParams buildParams(String weightsPath, String featureClass) {
-        MCTSParams params = new MCTSParams();
-        // Inline class spec: loadClass() parses this directly (it contains '{'),
-        // matching the NeuralRolloutPlayer(String, String) constructor via "args".
-        // weightsPath must NOT end in .json (the loader special-cases that).
-        String spec = "{\"class\":\"players.neural.NeuralRolloutPlayer\",\"args\":[\""
-                + weightsPath + "\",\"" + featureClass + "\"]}";
-        params.setParameterValue("rolloutType", MCTSEnums.Strategies.CLASS);
-        params.setParameterValue("rolloutClass", spec);
-        return params;
+    /**
+     * Copies the base params and applies the neural rollout override.
+     * Idempotent — re-applying the same overrides has no additional effect.
+     */
+    private static MCTSParams applyNeuralRollout(MCTSParams base, String weights, String features) {
+        MCTSParams modified = (MCTSParams) base.copy();
+        modified.setParameterValue("rolloutType", MCTSEnums.Strategies.CLASS);
+        modified.setParameterValue("rolloutClass",
+                "{\"class\":\"players.neural.NeuralRolloutPlayer\",\"args\":[\""
+                        + weights + "\",\"" + features + "\"]}");
+        return modified;
     }
 
     @Override
     public NeuralMCTSPlayer copy() {
-        NeuralMCTSPlayer c = new NeuralMCTSPlayer(weightsPath, featureClass);
-        c.setForwardModel(getForwardModel());
-        if (getParameters() != null) c.setBudget(getParameters().budget);
+        NeuralMCTSPlayer c = new NeuralMCTSPlayer(
+                (MCTSParams) getParameters().copy(), weightsPath, featureClass);
+        if (getForwardModel() != null) c.setForwardModel(getForwardModel());
         c.setName(toString());
         return c;
     }

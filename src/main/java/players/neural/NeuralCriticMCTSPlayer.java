@@ -4,16 +4,21 @@ import players.mcts.MCTSParams;
 import players.mcts.MCTSPlayer;
 
 /**
- * MCTS variant that uses the CRITIC head as the leaf-evaluation heuristic
- * instead of running rollouts. Sets rolloutLength=0 so MCTS skips rollouts
- * entirely and reads the value directly from the learned critic.
+ * MCTS player using the trained critic head as the leaf-value heuristic,
+ * with rollouts disabled (rolloutLength = 0).
  *
- * Sister class to NeuralMCTSPlayer (which uses the actor as a rollout policy).
- * These represent the two principled ways to inject a trained PPO net into
- * MCTS - "policy steers playouts" vs "value evaluates leaves" - and can be
- * run side by side in a tournament.
+ * IMPORTANT IMPLEMENTATION NOTE — why setParameterValue, not field assignment:
+ * "heuristic" is a REGISTRY-BACKED tunable parameter in MCTSParams
+ * (addTunableParameter("heuristic", IStateHeuristic.class, ...)), and
+ * TunableParameters.setParameterValue ends with `if (resetOn) _reset()`,
+ * which re-syncs ALL public fields from the registry — including
+ * `heuristic = getParameterValue("heuristic")` (MCTSParams._reset, line ~178).
  *
- *   new NeuralCriticMCTSPlayer("/abs/diamant_weights.txt", "games.diamant.DiamantFeatures")
+ * A direct field write (`params.heuristic = critic`) is therefore silently
+ * WIPED by the next setParameterValue call (and by params.copy(), which also
+ * ends in _reset()). The critic must be installed via
+ * setParameterValue("heuristic", critic) so it lives in the registry and
+ * survives both _reset() and copy().
  */
 public class NeuralCriticMCTSPlayer extends MCTSPlayer {
 
@@ -21,26 +26,34 @@ public class NeuralCriticMCTSPlayer extends MCTSPlayer {
     private final String featureClass;
 
     public NeuralCriticMCTSPlayer(String weightsPath, String featureClass) {
-        super(buildParams(weightsPath, featureClass), "MCTS-CriticHeuristic");
+        this(new MCTSParams(), weightsPath, featureClass);
+    }
+
+    public NeuralCriticMCTSPlayer(MCTSParams baseParams, String weightsPath, String featureClass) {
+        super(applyCritic(baseParams, weightsPath, featureClass), "MCTS-CriticHeuristic");
         this.weightsPath = weightsPath;
         this.featureClass = featureClass;
     }
 
-    private static MCTSParams buildParams(String weightsPath, String featureClass) {
-        MCTSParams params = new MCTSParams();
-        // The critic replaces rollouts entirely.
-        params.heuristic = new CriticHeuristic(weightsPath, featureClass);
-        // rolloutLength=0 skips the rollout loop; MCTS evaluates the leaf state
-        // directly via params.heuristic (line 908 of SingleTreeNode.rollout).
-        params.setParameterValue("rolloutLength", 0);
-        return params;
+    private static MCTSParams applyCritic(MCTSParams base, String weights, String features) {
+        MCTSParams modified = (MCTSParams) base.copy();
+        // Registry-backed: survives _reset() and copy(). Replaces whatever
+        // heuristic the base config specified (e.g., WinOnlyHeuristic).
+        modified.setParameterValue("heuristic", new CriticHeuristic(weights, features));
+        // Disable rollouts entirely; critic evaluates the leaf directly.
+        modified.setParameterValue("rolloutLength", 0);
+
+        // Sanity check: fail loudly if the critic did not survive.
+        if (!(modified.heuristic instanceof CriticHeuristic))
+            throw new AssertionError("CriticHeuristic was not installed — params plumbing changed?");
+        return modified;
     }
 
     @Override
     public NeuralCriticMCTSPlayer copy() {
-        NeuralCriticMCTSPlayer c = new NeuralCriticMCTSPlayer(weightsPath, featureClass);
-        c.setForwardModel(getForwardModel());
-        if (getParameters() != null) c.setBudget(getParameters().budget);
+        NeuralCriticMCTSPlayer c = new NeuralCriticMCTSPlayer(
+                (MCTSParams) getParameters().copy(), weightsPath, featureClass);
+        if (getForwardModel() != null) c.setForwardModel(getForwardModel());
         c.setName(toString());
         return c;
     }
