@@ -38,7 +38,7 @@ enum FeatureExtractors {
   //  ExplodingKittens( ExplodingKittensFeatures.class, null),
     LoveLetter(LLStateFeaturesReduced.class, null),
     Stratego(StrategoFeatures.class, null),
-    SushiGo(null, SGFeatures.class),
+    SushiGo(SGFeatures.class, SGFeatures.class),
     Connect4(Connect4StateVector.class, null),
     TicTacToe(TTTFeatures.class, TTTFeatures.class),
     Diamant(DiamantFeatures.class, DiamantFeatures.class),

@@ -5,18 +5,155 @@ import core.interfaces.IStateFeatureJSON;
 import core.interfaces.IStateFeatureVector;
 import games.sushigo.cards.SGCard;
 import org.json.simple.JSONObject;
-import utilities.Pair;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * SushiGo feature extractor.
+ *
+ * The vector produced by {@link #doubleVector} is a line-for-line port of the
+ * author's Python {@code SushiGoWrapper.process_json_obs} in PyTAG
+ * (pytag/utils/wrappers.py). It consumes the SAME JSON that
+ * {@link #getObservationJson} emits and applies the SAME transformation, so a
+ * PPO policy trained through PyTAG's JSON path and a policy used via this Java
+ * vector path see identical observations. Matching the author's layout exactly
+ * is deliberate: it guarantees train/inference parity.
+ *
+ * Layout (concatenated, matching the Python concatenate order):
+ *    1                : score      = playerScore / 50
+ *    1                : round      = roundCounter / 3
+ *   12                : played     = sum of one-hot of MY played cards
+ *  120                : hand       = 10 slots x 12 one-hot, zero-padded
+ *   12*(nPlayers-1)   : oppPlayed  = per-opponent sum of one-hot of played cards
+ *    1*(nPlayers-1)   : oppScores  = per-opponent score / 50
+ *
+ * At 2 players this is 147, matching the wrapper's declared shape=[147].
+ *
+ * card_types order is taken verbatim from the author's wrapper. SGCard.toString()
+ * emits "Maki","Maki-2","Maki-3" (Maki variants) and the plain type name
+ * otherwise, which matches these strings exactly. An empty deck stringifies to
+ * "EmptyDeck" (Deck.toString), which maps to an all-zero card embedding, exactly
+ * as the author's get_card_id does.
+ */
 public class SGFeatures implements IStateFeatureVector, IStateFeatureJSON {
+
+    // Verbatim from the author's SushiGoWrapper.card_types
+    private static final String[] CARD_TYPES = {
+            "Maki", "Maki-2", "Maki-3", "Chopsticks", "Tempura", "Sashimi",
+            "Dumpling", "SquidNigiri", "SalmonNigiri", "EggNigiri", "Wasabi",
+            "Pudding"
+    };
+    private static final int N_CARD_TYPES = CARD_TYPES.length; // 12
+    private static final int MAX_CARDS_IN_HAND = 10;           // author's max_cards_in_hand
 
     @Override
     public String[] names() {
-        return new String[0];
+        // CRITICAL: PyTAG derives the observation-space dimension from
+        // names().length (PyTAG.getObservationSpace, line ~173). It MUST equal
+        // doubleVector().length (147 at 2 players) or the gym env declares the
+        // wrong obs shape and reset()/stack fails. The strings are for
+        // inspection only; only the count matters.
+        java.util.List<String> n = new java.util.ArrayList<>();
+        n.add("score");
+        n.add("round");
+        for (String t : CARD_TYPES) n.add("myPlayed_" + t);
+        for (int slot = 0; slot < MAX_CARDS_IN_HAND; slot++)
+            for (String t : CARD_TYPES) n.add("hand_s" + slot + "_" + t);
+        // per-opponent played counts + score. At 2 players there is exactly one
+        // opponent; this generalises if the vector ever does.
+        for (int opp = 0; opp < 1; opp++) {            // 2-player: 1 opponent
+            for (String t : CARD_TYPES) n.add("opp" + opp + "_played_" + t);
+        }
+        for (int opp = 0; opp < 1; opp++)
+            n.add("opp" + opp + "_score");
+        return n.toArray(new String[0]);
     }
 
+    /**
+     * One-hot embedding of a single card string, matching the author's
+     * get_card_id: all-zeros for "EmptyDeck" (or any unrecognised token),
+     * else a 1 at the card's index in CARD_TYPES.
+     */
+    private static double[] getCardId(String card) {
+        double[] emb = new double[N_CARD_TYPES];
+        if (!card.equals("EmptyDeck")) {
+            int idx = Arrays.asList(CARD_TYPES).indexOf(card);
+            if (idx >= 0) emb[idx] = 1.0;
+        }
+        return emb;
+    }
+
+    @Override
+    public double[] doubleVector(AbstractGameState state, int playerID) {
+        // Build the JSON exactly as getObservationJson would, then process it
+        // identically to the Python wrapper. This guarantees the Java vector
+        // equals the Python-trained observation.
+        SGGameState sggs = (SGGameState) state;
+
+        String[] playedCards = sggs.getPlayedCards().get(playerID).toString().split(",");
+        String[] cardsInHand = sggs.getPlayerHands().get(playerID).toString().split(",");
+        double score = sggs.getGameScore(playerID) / 50.0;       // playerScore/50
+        double round = sggs.getRoundCounter() / 3.0;             // rounds/3
+
+        List<double[]> oppPlayedPerOpp = new ArrayList<>();
+        List<Double> oppScores = new ArrayList<>();
+        for (int i = 0; i < sggs.getNPlayers(); i++) {
+            if (i == playerID) continue;
+            String[] oppPlayed = sggs.getPlayedCards().get(i).toString().split(",");
+            // sum of one-hots for this opponent's played cards
+            double[] summed = new double[N_CARD_TYPES];
+            for (String c : oppPlayed) {
+                double[] e = getCardId(c);
+                for (int k = 0; k < N_CARD_TYPES; k++) summed[k] += e[k];
+            }
+            oppPlayedPerOpp.add(summed);
+            oppScores.add(sggs.getGameScore(i) / 50.0);
+        }
+
+        // my played: sum of one-hots
+        double[] playedSum = new double[N_CARD_TYPES];
+        for (String c : playedCards) {
+            double[] e = getCardId(c);
+            for (int k = 0; k < N_CARD_TYPES; k++) playedSum[k] += e[k];
+        }
+
+        // my hand: one-hot per slot, zero-padded to MAX_CARDS_IN_HAND, flattened
+        double[] handFlat = new double[MAX_CARDS_IN_HAND * N_CARD_TYPES];
+        for (int slot = 0; slot < MAX_CARDS_IN_HAND; slot++) {
+            if (slot < cardsInHand.length) {
+                double[] e = getCardId(cardsInHand[slot]);
+                System.arraycopy(e, 0, handFlat, slot * N_CARD_TYPES, N_CARD_TYPES);
+            }
+            // else leave zeros (the author's pad with np.zeros)
+        }
+
+        // opp played flattened (author: np.sum(..., axis=1).flatten() — per-opp
+        // sum over that opponent's cards, then concatenate opponents in order)
+        double[] oppPlayedFlat = new double[oppPlayedPerOpp.size() * N_CARD_TYPES];
+        for (int o = 0; o < oppPlayedPerOpp.size(); o++) {
+            System.arraycopy(oppPlayedPerOpp.get(o), 0, oppPlayedFlat,
+                    o * N_CARD_TYPES, N_CARD_TYPES);
+        }
+
+        // concatenate in the author's order:
+        // score, round, played, hand, oppPlayed, oppScores
+        int dim = 1 + 1 + N_CARD_TYPES + handFlat.length
+                + oppPlayedFlat.length + oppScores.size();
+        double[] obs = new double[dim];
+        int p = 0;
+        obs[p++] = score;
+        obs[p++] = round;
+        System.arraycopy(playedSum, 0, obs, p, N_CARD_TYPES); p += N_CARD_TYPES;
+        System.arraycopy(handFlat, 0, obs, p, handFlat.length); p += handFlat.length;
+        System.arraycopy(oppPlayedFlat, 0, obs, p, oppPlayedFlat.length); p += oppPlayedFlat.length;
+        for (double s : oppScores) obs[p++] = s;
+
+        return obs;
+    }
+
+    // Unchanged from the author's stub — emits the JSON the wrapper consumes.
     @Override
     public String getObservationJson(AbstractGameState gameState, int playerID) {
         SGGameState sggs = (SGGameState) gameState;
@@ -26,77 +163,13 @@ public class SGFeatures implements IStateFeatureVector, IStateFeatureJSON {
         json.put("rounds", sggs.getRoundCounter());
         json.put("cardsInHand", sggs.getPlayerHands().get(playerID).toString());
         json.put("playedCards", sggs.getPlayedCards().get(playerID).toString());
-        json.put("playerScore", sggs.playerScore[playerID]);
-        for (int i = 0; i < sggs.getNPlayers(); i++){
-            if (i != playerID){
+        json.put("playerScore", sggs.getGameScore(playerID));
+        for (int i = 0; i < sggs.getNPlayers(); i++) {
+            if (i != playerID) {
                 json.put("opp" + i + "playedCards", sggs.getPlayedCards().get(i).toString());
-                json.put("opp" + i + "score", sggs.playerScore[i]);
-
+                json.put("opp" + i + "score", sggs.getGameScore(i));
             }
         }
         return json.toJSONString();
     }
-
-    @Override
-    public double[] doubleVector(AbstractGameState state, int playerID) {
-        /* Normalised by default */
-        // todo would be better in SGParameters -> at least generating a list of strings
-        SGGameState sggs = (SGGameState) state;
-        int maxCardsInHand = ((SGParameters)sggs.getGameParameters()).nCards;
-        int nUnique = Arrays.stream(SGCard.SGCardType.values()).map(e -> e.getIconCountVariation().length).mapToInt(i -> i).sum();
-        String uniqueCards[] = new String[nUnique];
-        int counter = 0;
-        for (SGCard.SGCardType cardType: SGCard.SGCardType.values()){
-            if (cardType.getIconCountVariation().length == 1){
-                uniqueCards[counter] = cardType.name();
-                counter ++;
-            } else {
-                for (int i = 0; i < cardType.getIconCountVariation().length; i++) {
-                    uniqueCards[counter] = cardType.name() + "-" + cardType.getIconCountVariation()[i];
-                    counter++;
-                }
-            }
-        }
-        /* state representation */
-        // rounds
-        // cards in hand
-        // player score
-
-        // encode player hand - note that this could be one hot encoded
-        int playerHand[] = new int[maxCardsInHand];
-        List<SGCard> cardsInHand = sggs.playerHands.get(playerID).getComponents();
-        for (int i = 0; i < cardsInHand.size(); i++){
-            playerHand[i] = Arrays.asList(uniqueCards).indexOf(cardsInHand.get(i).toString());
-        }
-
-        // played cards
-        for (int i = 0; i < sggs.getNPlayers(); i++){
-            List<SGCard> playedCards = sggs.getPlayedCards().get(i).getComponents();
-//            Arrays.asList(uniqueCards).indexOf(cardsInHand.get(i).toString());
-        }
-
-        // todo this is not finished
-        return new double[0];
-    }
-
-//    public int[] encodeCardType(List<SGCard> deck){
-//        int nUnique = (int) Arrays.stream(SGCard.SGCardType.values()).map(e -> e.getIconCountVariation().length).count();
-//        String uniqueCards[] = new String[nUnique];
-//        int counter = 0;
-//        for (SGCard.SGCardType cardType: SGCard.SGCardType.values()){
-//            for (int i = 0; i < cardType.getIconCountVariation().length; i++){
-//                uniqueCards[counter] = cardType.name() + cardType.getIconCountVariation()[i];
-//                counter ++;
-//            }
-//        }
-//        // todo need to encode different variants correctly
-//        for (SGCard cards: deck){
-//            cards.getType();
-//        }
-//        for (Pair<SGCard.SGCardType, Integer> types : ((SGParameters) getGameParameters()).nCardsPerType.keySet()){
-//
-//        }
-//        return new int[0];
-//    }
-
 }
