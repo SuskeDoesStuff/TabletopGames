@@ -1,6 +1,7 @@
 package games.loveletter;
 
 import core.*;
+import core.CoreConstants.VisibilityMode;
 import core.actions.AbstractAction;
 import core.actions.ActionSpace;
 import core.components.Deck;
@@ -262,8 +263,21 @@ public class LoveLetterForwardModel extends StandardForwardModel implements ITre
     @Override
     public List<AbstractAction> _computeAvailableActions(AbstractGameState gameState, ActionSpace actionSpace) {
         LoveLetterGameState llgs = (LoveLetterGameState) gameState;
-        if (!llgs.isCurrentlyActive(llgs.getCurrentPlayer()))
+        if (!llgs.isCurrentlyActive(llgs.getCurrentPlayer())) {
+            System.out.println("=== LL INACTIVE-PLAYER DIAG ===");
+            System.out.println("currentPlayer=" + llgs.getCurrentPlayer());
+            System.out.println("currentlyActive=" + java.util.Arrays.toString(llgs.currentlyActive));
+            System.out.println("gameStatus=" + llgs.getGameStatus());
+            System.out.println("roundCounter=" + llgs.getRoundCounter());
+            int alive = 0;
+            for (int i = 0; i < llgs.getNPlayers(); i++)
+                if (llgs.isCurrentlyActive(i) && llgs.playerHandCards.get(i).getSize() > 0) alive++;
+            System.out.println("playersAliveWithCards=" + alive);
+            for (int i = 0; i < llgs.getNPlayers(); i++)
+                System.out.println("  player " + i + " handSize=" + llgs.playerHandCards.get(i).getSize()
+                        + " result=" + llgs.getPlayerResults()[i]);
             throw new AssertionError("???.");
+        }
 
         Set<AbstractAction> actions = new LinkedHashSet<>();
         int playerID = gameState.getCurrentPlayer();

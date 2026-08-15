@@ -349,6 +349,13 @@ public class PyTAG {
             return gameState.copy(gameState.getCurrentPlayer());
         }
 
+       // The game may have ended on the Python agent's own turn, which nextDecision()
+        // does not catch (its isDone() check is gated behind the non-Python loop).
+        // Guard terminality explicitly on the game status.
+        if (gameState.getGameStatus() != core.CoreConstants.GameResult.GAME_ONGOING) {
+            return gameState.copy(gameState.getCurrentPlayer());
+        }
+
         int activePlayer = gameState.getCurrentPlayer();
         AbstractGameState observation = gameState.copy(activePlayer);
 
