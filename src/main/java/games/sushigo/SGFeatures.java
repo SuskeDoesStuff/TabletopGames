@@ -30,11 +30,10 @@ import java.util.List;
 
  At 2 players this is 147, matching the wrapper's declared shape=[147].
 
- card_types order is taken verbatim from the author's wrapper. SGCard.toString()
+ SGCard.toString()
  emits "Maki","Maki-2","Maki-3" (Maki variants) and the plain type name
  otherwise, which matches these strings exactly. An empty deck stringifies to
- "EmptyDeck" (Deck.toString), which maps to an all-zero card embedding, exactly
- as the author's get_card_id does.
+ "EmptyDeck" (Deck.toString), which maps to an all-zero card embedding.
 **/
 public class SGFeatures implements IStateFeatureVector, IStateFeatureJSON {
 
@@ -44,7 +43,7 @@ public class SGFeatures implements IStateFeatureVector, IStateFeatureJSON {
             "Pudding"
     };
     private static final int N_CARD_TYPES = CARD_TYPES.length; // 12
-    private static final int MAX_CARDS_IN_HAND = 10;           // author's max_cards_in_hand
+    private static final int MAX_CARDS_IN_HAND = 10;           //  max_cards_in_hand
 
     @Override
     public String[] names() {
@@ -115,10 +114,10 @@ public class SGFeatures implements IStateFeatureVector, IStateFeatureJSON {
                 double[] e = getCardId(cardsInHand[slot]);
                 System.arraycopy(e, 0, handFlat, slot * N_CARD_TYPES, N_CARD_TYPES);
             }
-            // else leave zeros (the author's pad with np.zeros)
+            // else leave zeros
         }
 
-        // opp played flattened (author: np.sum(..., axis=1).flatten() — per-opp
+        // opp played flattened per opp
         // sum over that opponent's cards, then concatenate opponents in order)
         double[] oppPlayedFlat = new double[oppPlayedPerOpp.size() * N_CARD_TYPES];
         for (int o = 0; o < oppPlayedPerOpp.size(); o++) {
@@ -126,7 +125,7 @@ public class SGFeatures implements IStateFeatureVector, IStateFeatureJSON {
                     o * N_CARD_TYPES, N_CARD_TYPES);
         }
 
-        // concatenate in the author's order:
+        // concatenate in order
         // score, round, played, hand, oppPlayed, oppScores
         int dim = 1 + 1 + N_CARD_TYPES + handFlat.length
                 + oppPlayedFlat.length + oppScores.size();

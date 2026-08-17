@@ -8,21 +8,6 @@ import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Standalone weight-validation tool.
- *
- * Loads the JSON produced by export_weights.py and runs the same forward pass
- * (MLP -> actor logits) on the same fixed test inputs (zeros / ones / ramp)
- * that the Python exporter prints. If the Java output matches the Python
- * "reference outputs" block to ~4 decimal places, the Java forward pass and
- * weight layout are correct.
- *
- * Usage:
- *   java -cp target/TAG.jar players.neural.VerifyWeights /abs/path/weights.txt
- *
- * No game, no forward model, no feature extractor involved - this is pure math
- * on the loaded weights.
- */
 public class VerifyWeights {
 
     public static void main(String[] args) throws Exception {
