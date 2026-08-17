@@ -6,6 +6,8 @@ import core.actions.SetGridValueAction;
 import core.components.BoardNode;
 import core.components.GridBoard;
 import core.forwardModels.SequentialActionForwardModel;
+import core.interfaces.ITreeActionSpace;
+import utilities.ActionTreeNode;
 import utilities.Pair;
 
 import java.util.ArrayList;
@@ -14,7 +16,8 @@ import java.util.LinkedList;
 import java.util.List;
 
 
-public class Connect4ForwardModel extends SequentialActionForwardModel {
+// Connect4 forward model that extends SequentialActionForwardModel and implements ITreeActionSpace so that PyTAG is able to train a PPO policy on Connect4
+public class Connect4ForwardModel extends SequentialActionForwardModel implements ITreeActionSpace {
 
     @Override
     protected void _setup(AbstractGameState firstState) {
@@ -60,6 +63,44 @@ public class Connect4ForwardModel extends SequentialActionForwardModel {
         }
         super._afterAction(currentState, action);
     }
+
+    @Override
+    public ActionTreeNode initActionTree(AbstractGameState gameState) {
+        int gridSize = ((Connect4GameParameters) gameState.getGameParameters()).gridSize;
+        ActionTreeNode root = new ActionTreeNode(0, "root");
+        for (int col = 0; col < gridSize; col++) {
+            root.addChild(0, "col" + col);
+        }
+        return root;
+    }
+
+    @Override
+    public ActionTreeNode updateActionTree(ActionTreeNode root, AbstractGameState gameState) {
+        root.resetTree();
+        if (!gameState.isNotTerminal()) return root;
+
+        Connect4GameState c4gs = (Connect4GameState) gameState;
+        int player    = c4gs.getCurrentPlayer();
+        int width     = c4gs.gridBoard.getWidth();
+        int height    = c4gs.gridBoard.getHeight();
+        int boardId   = c4gs.gridBoard.getComponentID();
+        int pieceId   = Connect4Constants.playerMapping.get(player).getComponentID();
+        List<ActionTreeNode> children = root.getChildren();
+
+        for (int x = 0; x < width; x++) {
+            // lowest empty cell in column x is the legal drop
+            for (int y = height - 1; y >= 0; y--) {
+                if (c4gs.gridBoard.getElement(x, y).getComponentName().equals(Connect4Constants.emptyCell)) {
+                    ActionTreeNode leaf = children.get(x);
+                    leaf.setAction(new SetGridValueAction(boardId, x, y, pieceId));
+                    leaf.setValue(1);
+                    break;
+                }
+            }
+        }
+        return root;
+    }
+
 
     /**
      * Checks if the game ended.

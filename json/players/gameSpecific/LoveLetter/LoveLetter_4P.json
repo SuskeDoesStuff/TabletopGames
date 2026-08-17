@@ -4,9 +4,8 @@
   "rolloutLength" : 0,
   "opponentTreePolicy" : "SelfOnly",
   "heuristic" : {
-    "heuristicType" : "LEADER",
-    "class" : "players.heuristics.CoarseTunableHeuristic"
-  },
+  "class" : "players.heuristics.LeaderHeuristic"
+},
   "FPU" : 1.0,
   "maxTreeDepth" : 1,
   "treePolicy" : "AlphaGo",

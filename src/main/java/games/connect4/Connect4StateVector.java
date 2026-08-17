@@ -1,4 +1,5 @@
 package games.connect4;
+
 import core.AbstractGameState;
 import core.components.BoardNode;
 import core.components.Token;
@@ -9,9 +10,9 @@ import java.util.Arrays;
 import java.util.stream.IntStream;
 
 public class Connect4StateVector implements IStateFeatureVector, IStateKey {
-    // assume the grid is 8x8 ... if not, write a new StateVector
+
     private final String[] names = (String[]) IntStream.range(0, 8).boxed().flatMap(row ->
-            IntStream.range(0, 3).mapToObj(col -> String.format("%d:%d", row, col))
+            IntStream.range(0, 8).mapToObj(col -> String.format("%d:%d", row, col))
     ).toArray(String[]::new);
 
     @Override
@@ -35,5 +36,4 @@ public class Connect4StateVector implements IStateFeatureVector, IStateKey {
     public String[] names() {
         return names;
     }
-
 }

@@ -13,6 +13,7 @@ import games.powergrid.PowerGridFeatures;
 import games.powergrid.PowerGridGameState;
 import games.powergrid.PowerGridParameters;
 import games.powergrid.components.PowerGridCard;
+import games.connect4.Connect4StateVector;
 import games.stratego.StrategoFeatures;
 import games.sushigo.SGFeatures;
 import games.tictactoe.TTTFeatures;
@@ -37,7 +38,8 @@ enum FeatureExtractors {
   //  ExplodingKittens( ExplodingKittensFeatures.class, null),
     LoveLetter(LLStateFeaturesReduced.class, null),
     Stratego(StrategoFeatures.class, null),
-    SushiGo(null, SGFeatures.class),
+    SushiGo(SGFeatures.class, SGFeatures.class),
+    Connect4(Connect4StateVector.class, null),
     TicTacToe(TTTFeatures.class, TTTFeatures.class),
     Diamant(DiamantFeatures.class, DiamantFeatures.class),
 	PowerGrid(PowerGridFeatures.class, null); //gets both the JSON and Vector observation 
@@ -344,6 +346,11 @@ public class PyTAG {
         boolean isTerminal = nextDecision();
         if (isTerminal){
             // game is over
+            return gameState.copy(gameState.getCurrentPlayer());
+        }
+
+        // Guard logic to catch game ends on python agent's turns in a game like LoveLetter
+        if (gameState.getGameStatus() != core.CoreConstants.GameResult.GAME_ONGOING) {
             return gameState.copy(gameState.getCurrentPlayer());
         }
 

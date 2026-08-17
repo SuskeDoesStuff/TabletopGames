@@ -41,5 +41,16 @@ src/main/java/META-INF/MANIFEST.MF
 
 src/pytag/env/
 metrics/out/*
+metrics/sweep_*
+metrics/OUTS
 treeRecorder*
 .vscode/*
+
+.venv/
+*_weights.txt
+examples/runs/
+metrics/tuned_*
+metrics/BACKUP*
+metrics/paramsearch*
+metrics/probe*
+metrics/smoke*
