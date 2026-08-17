@@ -16,20 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-/**
- * Game-agnostic rollout policy backed by a PyTAG PPO (PPONet) MLP.
- *
- * Action selection is SOFTMAX SAMPLING over legal leaves by default, which
- * matches how PPO's actor was trained (Categorical(logits) with an entropy
- * bonus). This restores per-rollout trajectory variance - which MCTS depends
- * on - and respects the policy's actual confidence: confident logits still
- * mostly pick the best action, uncertain logits explore alternatives.
- *
- * Argmax is available via the 3-arg constructor for explicit A/B testing
- * (greedy=true).
- *
- * Only handles MLP policies. For CNN/LSTM, use ONNX instead.
- */
+// Standalone Neural Player
 public class NeuralRolloutPlayer extends AbstractPlayer {
 
     private final List<double[][]> hiddenW = new ArrayList<>();

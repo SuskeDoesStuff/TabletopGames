@@ -51,3 +51,6 @@ treeRecorder*
 examples/runs/
 metrics/tuned_*
 metrics/BACKUP*
+metrics/paramsearch*
+metrics/probe*
+metrics/smoke*

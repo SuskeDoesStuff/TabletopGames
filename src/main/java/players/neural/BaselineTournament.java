@@ -15,27 +15,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Diagnostic baseline tournament with optional explicit budget override.
- *
- * If no budget argument is passed, each MCTS agent uses its own default
- * parameters (which may differ between MCTSPlayer and BasicMCTSPlayer —
- * that's precisely what we want to diagnose).
- *
- * If a budget argument is passed (4th positional arg), both MCTS agents are
- * set to that explicit budget and budgetType=BUDGET_FM_CALLS, so the only
- * difference between them is their internal MCTS algorithm.
- *
- * Usage:
- *   java -cp target/TAG.jar players.neural.BaselineTournament <GameType> [matchups] [nPlayers] [budget]
- *
- * Examples:
- *   java -cp target/TAG.jar players.neural.BaselineTournament Connect4 1500 2
- *     -> Default budgets (whatever each agent ships with).
- *
- *   java -cp target/TAG.jar players.neural.BaselineTournament Connect4 1500 2 4000
- *     -> Both MCTS agents forced to budget=4000 FM calls.
- */
 public class BaselineTournament {
 
     public static void main(String[] args) throws Exception {
@@ -89,11 +68,6 @@ public class BaselineTournament {
         tournament.run();
     }
 
-    /**
-     * Reflect on the params object to read & print the budget/budgetType fields.
-     * Both MCTSParams and BasicMCTSParams extend PlayerParameters which has these
-     * fields publicly. Reflection avoids hard-coding which params subclass we have.
-     */
     private static void printBudgetInfo(String label, Object params) {
         try {
             Field budgetField = params.getClass().getField("budget");
@@ -111,11 +85,6 @@ public class BaselineTournament {
         }
     }
 
-    /**
-     * Set both budget value and budgetType. Uses setParameterValue so it goes
-     * through TAG's tunable-parameter system. Tolerates failure on budgetType
-     * if the agent's params don't expose it via that mechanism.
-     */
     private static void applyBudgetOverride(Object params, int newBudget) {
         try {
             params.getClass().getMethod("setParameterValue", String.class, Object.class)
@@ -128,8 +97,7 @@ public class BaselineTournament {
             params.getClass().getMethod("setParameterValue", String.class, Object.class)
                     .invoke(params, "budgetType", "BUDGET_FM_CALLS");
         } catch (Exception e) {
-            // Many TAG params accept enum-as-string here; if not, leave default
-            // untouched and let the user see in the diagnostic printout.
+            
         }
     }
 }

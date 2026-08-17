@@ -4,19 +4,7 @@ import players.mcts.MCTSEnums;
 import players.mcts.MCTSParams;
 import players.mcts.MCTSPlayer;
 
-/**
- * Combined neural injection: policy as rollout strategy AND critic as leaf
- * heuristic. Rollout length is INHERITED from the base/tuned config (not
- * hardcoded), so NeuralBoth and NeuralRollout run identical rollouts and differ
- * only in the leaf heuristic (CriticHeuristic vs the config's WinOnlyHeuristic).
- *
- * IMPORTANT IMPLEMENTATION NOTE — why setParameterValue for the heuristic:
- * "heuristic" is a registry-backed tunable in MCTSParams, and every
- * setParameterValue call ends in _reset(), which restores `heuristic` from
- * the registry. A direct field write (`params.heuristic = critic`) followed
- * by ANY setParameterValue call is silently wiped. The critic must be
- * installed via setParameterValue("heuristic", ...) to survive.
- */
+// Combined neural injection player with policy guiding the rollouts and critic heuristic for state evaluation.
 public class NeuralBothMCTSPlayer extends MCTSPlayer {
 
     private final String weightsPath;
@@ -34,19 +22,13 @@ public class NeuralBothMCTSPlayer extends MCTSPlayer {
 
     private static MCTSParams applyBoth(MCTSParams base, String weights, String features) {
         MCTSParams modified = (MCTSParams) base.copy();
-        // Policy as rollout strategy (registry-backed params)
+        // Policy as rollout strategy
         modified.setParameterValue("rolloutType", MCTSEnums.Strategies.CLASS);
         modified.setParameterValue("rolloutClass",
                 "{\"class\":\"players.neural.NeuralRolloutPlayer\",\"args\":[\""
                         + weights + "\",\"" + features + "\"]}");
-        // Critic as leaf-value heuristic — registry-backed, survives _reset/copy
+        // Critic as a heuristic
         modified.setParameterValue("heuristic", new CriticHeuristic(weights, features));
-        // NOTE: rolloutLength is deliberately NOT overridden. NeuralBoth inherits
-        // whatever the base/tuned config sets (identical to NeuralRollout), so the
-        // two agents run the SAME rollouts and differ ONLY in the leaf heuristic:
-        // WinOnlyHeuristic (NeuralRollout) vs CriticHeuristic (this one).
-        // To get the short-rollout variant where the critic does the leaf work,
-        // add: modified.setParameterValue("rolloutLength", 5);
 
         // Sanity check: fail loudly if the critic did not survive.
         if (!(modified.heuristic instanceof CriticHeuristic))

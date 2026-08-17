@@ -10,25 +10,7 @@ import players.simple.RandomPlayer;
 import java.util.List;
 import java.util.Random;
 
-/**
- * Parity harness for SushiGo features.
- *
- * Plays a 2-player SushiGo game forward a handful of random moves to reach a
- * non-trivial mid-round state (some cards played, some in hand), then for the
- * current player prints BOTH:
- *   1. the JSON observation (what getObservationJson emits, what the Python
- *      wrapper consumes), and
- *   2. the doubleVector output (the Java vector path used at inference),
- *      with its length.
- *
- * To confirm parity: paste the printed JSON into the Python snippet (see
- * SUSHIGO_QUICKSTART.md), run SushiGoWrapper.process_json_obs on it, and check
- * the resulting numpy array equals the doubleVector printed here, element by
- * element. They should match to floating-point precision.
- *
- * Run:
- *   java -cp target/TAG.jar players.neural.SGParityCheck [seed] [nMoves]
- */
+// parity checker on TAG side for SushiGo!
 public class SGParityCheck {
 
     public static void main(String[] args) {

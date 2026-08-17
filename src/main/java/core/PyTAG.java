@@ -349,9 +349,7 @@ public class PyTAG {
             return gameState.copy(gameState.getCurrentPlayer());
         }
 
-       // The game may have ended on the Python agent's own turn, which nextDecision()
-        // does not catch (its isDone() check is gated behind the non-Python loop).
-        // Guard terminality explicitly on the game status.
+        // Guard logic to catch game ends on python agent's turns in a game like LoveLetter
         if (gameState.getGameStatus() != core.CoreConstants.GameResult.GAME_ONGOING) {
             return gameState.copy(gameState.getCurrentPlayer());
         }

@@ -13,20 +13,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Game-agnostic round-robin tournament:
- *   MCTS-NeuralRollout  vs  MCTS-RandomRollout  vs  BasicMCTS  vs  Random
- *
- * Run (after building TAG):
- *   java -cp target/TAG.jar players.neural.RunTournament \
- *        TicTacToe /abs/ttt_weights.txt     games.tictactoe.TTTFeatures 500
- *   java -cp target/TAG.jar players.neural.RunTournament \
- *        Diamant   /abs/diamant_weights.txt games.diamant.DiamantFeatures 500
- *   java -cp target/TAG.jar players.neural.RunTournament \
- *        SushiGo   /abs/sushigo_weights.txt games.sushigo.SGFeatures 500
- *
- * Args: <GameType> <weights.txt> <featureExtractorClass> [matchups] [nPlayers]
- */
+// Custom tournament runners
 public class RunTournament {
 
     public static void main(String[] args) {

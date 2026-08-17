@@ -11,35 +11,33 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * SushiGo feature extractor.
- *
- * The vector produced by {@link #doubleVector} is a line-for-line port of the
- * author's Python {@code SushiGoWrapper.process_json_obs} in PyTAG
- * (pytag/utils/wrappers.py). It consumes the SAME JSON that
- * {@link #getObservationJson} emits and applies the SAME transformation, so a
- * PPO policy trained through PyTAG's JSON path and a policy used via this Java
- * vector path see identical observations. Matching the author's layout exactly
- * is deliberate: it guarantees train/inference parity.
- *
- * Layout (concatenated, matching the Python concatenate order):
- *    1                : score      = playerScore / 50
- *    1                : round      = roundCounter / 3
- *   12                : played     = sum of one-hot of MY played cards
- *  120                : hand       = 10 slots x 12 one-hot, zero-padded
- *   12*(nPlayers-1)   : oppPlayed  = per-opponent sum of one-hot of played cards
- *    1*(nPlayers-1)   : oppScores  = per-opponent score / 50
- *
- * At 2 players this is 147, matching the wrapper's declared shape=[147].
- *
- * card_types order is taken verbatim from the author's wrapper. SGCard.toString()
- * emits "Maki","Maki-2","Maki-3" (Maki variants) and the plain type name
- * otherwise, which matches these strings exactly. An empty deck stringifies to
- * "EmptyDeck" (Deck.toString), which maps to an all-zero card embedding, exactly
- * as the author's get_card_id does.
- */
+ SushiGo feature extractor.
+
+ The vector produced by {@link #doubleVector} is a line by line port of the
+ Python {@code SushiGoWrapper.process_json_obs} in PyTAG
+ (pytag/utils/wrappers.py). It consumes the SAME JSON that
+ {@link #getObservationJson} emits and applies the SAME transformation, so a
+ PPO policy trained through PyTAG's JSON path and a policy used via this Java
+ vector path see identical observations. This matches the PyTAG implementation to guarantee training and parity.
+
+ Layout (concatenated, matching the Python concatenate order):
+    1                : score      = playerScore / 50
+    1                : round      = roundCounter / 3
+   12                : played     = sum of one-hot of MY played cards
+  120                : hand       = 10 slots x 12 one-hot, zero-padded
+   12*(nPlayers-1)   : oppPlayed  = per-opponent sum of one-hot of played cards
+    1*(nPlayers-1)   : oppScores  = per-opponent score / 50
+
+ At 2 players this is 147, matching the wrapper's declared shape=[147].
+
+ card_types order is taken verbatim from the author's wrapper. SGCard.toString()
+ emits "Maki","Maki-2","Maki-3" (Maki variants) and the plain type name
+ otherwise, which matches these strings exactly. An empty deck stringifies to
+ "EmptyDeck" (Deck.toString), which maps to an all-zero card embedding, exactly
+ as the author's get_card_id does.
+**/
 public class SGFeatures implements IStateFeatureVector, IStateFeatureJSON {
 
-    // Verbatim from the author's SushiGoWrapper.card_types
     private static final String[] CARD_TYPES = {
             "Maki", "Maki-2", "Maki-3", "Chopsticks", "Tempura", "Sashimi",
             "Dumpling", "SquidNigiri", "SalmonNigiri", "EggNigiri", "Wasabi",
@@ -50,19 +48,14 @@ public class SGFeatures implements IStateFeatureVector, IStateFeatureJSON {
 
     @Override
     public String[] names() {
-        // CRITICAL: PyTAG derives the observation-space dimension from
-        // names().length (PyTAG.getObservationSpace, line ~173). It MUST equal
-        // doubleVector().length (147 at 2 players) or the gym env declares the
-        // wrong obs shape and reset()/stack fails. The strings are for
-        // inspection only; only the count matters.
+        // PyTAG gets the obs dim from names.length(). It needs to be equal to doubleVector().length or the gym env fails to do anything
         java.util.List<String> n = new java.util.ArrayList<>();
         n.add("score");
         n.add("round");
         for (String t : CARD_TYPES) n.add("myPlayed_" + t);
         for (int slot = 0; slot < MAX_CARDS_IN_HAND; slot++)
             for (String t : CARD_TYPES) n.add("hand_s" + slot + "_" + t);
-        // per-opponent played counts + score. At 2 players there is exactly one
-        // opponent; this generalises if the vector ever does.
+        // per-opponent played counts + score. At 2 players there is exactly one opponent; this generalises if the vector ever does.
         for (int opp = 0; opp < 1; opp++) {            // 2-player: 1 opponent
             for (String t : CARD_TYPES) n.add("opp" + opp + "_played_" + t);
         }
@@ -71,11 +64,7 @@ public class SGFeatures implements IStateFeatureVector, IStateFeatureJSON {
         return n.toArray(new String[0]);
     }
 
-    /**
-     * One-hot embedding of a single card string, matching the author's
-     * get_card_id: all-zeros for "EmptyDeck" (or any unrecognised token),
-     * else a 1 at the card's index in CARD_TYPES.
-     */
+    // One hot encoding of allof the card types
     private static double[] getCardId(String card) {
         double[] emb = new double[N_CARD_TYPES];
         if (!card.equals("EmptyDeck")) {
@@ -153,7 +142,6 @@ public class SGFeatures implements IStateFeatureVector, IStateFeatureJSON {
         return obs;
     }
 
-    // Unchanged from the author's stub — emits the JSON the wrapper consumes.
     @Override
     public String getObservationJson(AbstractGameState gameState, int playerID) {
         SGGameState sggs = (SGGameState) gameState;

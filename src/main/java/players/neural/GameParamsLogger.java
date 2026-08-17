@@ -9,16 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Lightweight per-game logger: prints a ONE-LINE header before every match
- * showing who is playing, and a full parameter block ONLY the first time each
- * agent name is seen. Output goes to System.out (tee'd into tournament.txt).
- *
- * The full up-front roster is printed separately by TunedTournament before the
- * tournament starts (see printRoster there) — this listener is just the
- * per-match marker so you can tie ComputationTimes / results rows back to
- * specific games while scrolling the log.
- */
+// Lightweight ParamLogger for TunedTournament
 public class GameParamsLogger implements IGameListener {
 
     private Game game;

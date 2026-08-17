@@ -28,34 +28,34 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Tournament runner using a tuned MCTSParams config (loaded from JSON) as the
- * shared base for all MCTS-family agents, with the neural variants layering
- * their specific overrides on top.
- *
- * All MCTS agents — plain MCTSPlayer and the three neural variants — start
- * from the same tuned base (treePolicy, FPU, reuseTree, etc.). They differ
- * ONLY in:
- *   - NeuralMCTSPlayer        : neural rollout strategy
- *   - NeuralCriticMCTSPlayer  : critic heuristic + rolloutLength=0
- *   - NeuralBothMCTSPlayer    : both, with rolloutLength=5
- *
- * Output:
- *   - Per-event CSVs (via MetricsGameListener) in the outputDir.
- *   - A `tournament.txt` file in the same outputDir capturing all stdout/stderr
- *     including the final ranking, head-to-head stats, and config printout.
- *
- * Usage:
- *   java -cp target/TAG.jar players.neural.TunedTournament \
- *       <game> <paramsJson> <weights> <features> \
- *       [budgetType] [budget] [matchups] [nPlayers] [outputDir]
- *
- * Example:
- *   java -cp target/TAG.jar players.neural.TunedTournament \
- *       Connect4 json/players/gameSpecific/Connect4.json \
- *       /home/suske/projects/RL-MCTS/PyTAG/connect4_weights.txt \
- *       games.connect4.Connect4StateVector \
- *       BUDGET_TIME 100 3000 2
- */
+ Tournament runner using a tuned MCTSParams config (loaded from JSON) as the
+ shared base for all MCTS-family agents, with the neural variants layering
+ their specific overrides on top.
+
+ All MCTS agents — plain MCTSPlayer and the three neural variants — start
+ from the same tuned base (treePolicy, FPU, reuseTree, etc.). They differ
+ ONLY in:
+   - NeuralMCTSPlayer        : neural rollout strategy
+   - NeuralCriticMCTSPlayer  : critic heuristic + rolloutLength=0
+   - NeuralBothMCTSPlayer    : both, with rolloutLength=5
+
+ Output:
+   - Per-event CSVs (via MetricsGameListener) in the outputDir.
+   - A `tournament.txt` file in the same outputDir capturing all stdout/stderr
+     including the final ranking, head-to-head stats, and config printout.
+
+ Usage:
+   java -cp target/TAG.jar players.neural.TunedTournament \
+       <game> <paramsJson> <weights> <features> \
+       [budgetType] [budget] [matchups] [nPlayers] [outputDir]
+
+ Example:
+   java -cp target/TAG.jar players.neural.TunedTournament \
+       Connect4 json/players/gameSpecific/Connect4.json \
+       /home/keshav/projects/RL-MCTS/PyTAG/connect4_weights.txt \
+       games.connect4.Connect4StateVector \
+       BUDGET_TIME 100 3000 2
+**/
 public class TunedTournament {
 
     public static void main(String[] args) throws Exception {
@@ -76,9 +76,6 @@ public class TunedTournament {
         String outDir = args.length > 8 ? args[8]
                 : "metrics/tuned_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
 
-        // Ensure the output directory exists, then tee stdout/stderr to a
-        // tournament.txt inside it. From this point on every println goes to
-        // both the terminal AND the file.
         new File(outDir).mkdirs();
         File logFile = new File(outDir, "tournament.txt");
         PrintStream consoleStdout = System.out;
@@ -109,11 +106,7 @@ public class TunedTournament {
 
         // Load the tuned config
         MCTSParams tunedBase = JSONUtils.loadClassFromFile(paramsPath);
-        // Override budget settings (JSON typically has -999 as a placeholder).
-        // MUST go through setParameterValue: budget/budgetType are registry-backed
-        // tunable parameters, and params.copy() ends in _reset(), which restores
-        // public fields FROM the registry. A direct field write here would be
-        // silently reverted to the JSON's values (-999!) in every agent's copy.
+
         tunedBase.setParameterValue("budgetType", budgetType);
         tunedBase.setParameterValue("budget", budget);
 
@@ -134,8 +127,6 @@ public class TunedTournament {
         // Build the agent list — each gets its own copy of the tuned base
         List<AbstractPlayer> agents = new ArrayList<>();
         MCTSPlayer plainMCTS = new MCTSPlayer((MCTSParams) tunedBase.copy(), "MCTSPlayer");
-        // Verify the budget override survived the copy (it would not have, if set
-        // via direct field assignment — see comment above).
         MCTSParams check = (MCTSParams) plainMCTS.getParameters();
         if (check.budget != budget || check.budgetType != budgetType)
             throw new AssertionError("Budget override lost in copy: budget=" + check.budget

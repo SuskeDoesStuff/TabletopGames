@@ -11,22 +11,7 @@ import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Uses the CRITIC head of a trained PPO policy as MCTS's state-evaluation
- * heuristic. Combined with rolloutLength=0, this makes MCTS evaluate leaves
- * directly via the learned value function with no rollouts at all -
- * sidestepping the rollout-bias / opponent-diversity problems that hurt the
- * policy-as-rollout approach.
- *
- * Loads the same weights JSON that NeuralRolloutPlayer uses, but ignores the
- * actor head and only runs trunk -> critic.
- *
- * The critic was trained from the deciding player's perspective (using the
- * same feature extractor) to predict expected outcome in [-1, 1]. The output
- * is linearly rescaled to [0, 1] and terminal states return WinOnlyHeuristic's
- * exact values, so this heuristic is scale-identical to the tuned baseline's
- * WinOnlyHeuristic and differs only on non-terminal (network-evaluated) states.
- */
+// Heuristic that uses the critic head of the PPO policy for MCTS state evaluation for intermediate states and falls back to vanilla win/loss/draw settings for terminal states.
 public class CriticHeuristic implements IStateHeuristic {
 
     private final List<double[][]> hiddenW = new ArrayList<>();
@@ -56,17 +41,7 @@ public class CriticHeuristic implements IStateHeuristic {
 
     @Override
     public double evaluateState(AbstractGameState gs, int playerId) {
-        // TERMINAL STATES: return the actual game result, never the network.
-        // The critic only knows board patterns; it does not reliably recognise
-        // that a game is over. Without this check, MCTS cannot distinguish an
-        // actual win from a mid-game position (a won state might score 0.3
-        // while a speculative branch scores 0.6), which is fatal in tactical
-        // games like Connect4. This mirrors TAG's own heuristics (e.g.
-        // WinOnlyHeuristic), which all dispatch on getPlayerResults() first.
-        // Terminal values mirror WinOnlyHeuristic EXACTLY (same [0,1] scale), so
-        // agents using this heuristic and agents using WinOnlyHeuristic back up
-        // identical values for identical outcomes. The only remaining difference
-        // between such agents is the non-terminal (network) evaluations.
+
         switch (gs.getPlayerResults()[playerId]) {
             case WIN_GAME:
                 return 1.0;
@@ -87,19 +62,12 @@ public class CriticHeuristic implements IStateHeuristic {
             for (int i = 0; i < x.length; i++) if (x[i] < 0) x[i] = 0.0;
         }
         double[] v = linear(x, criticW, criticB);
-        // The critic head was trained on returns in [-1, 1] (PyTAG rewards are
-        // +/-1). Clamp to that range, then linearly rescale to [0, 1] so the
-        // heuristic's scale matches WinOnlyHeuristic: 1 = certain win,
-        // 0.5 = neutral/draw-ish, 0 = certain loss. A linear map preserves all
-        // orderings; this is purely for scale consistency with the baseline.
+ 
         double raw = v[0];
         if (raw > 1.0) raw = 1.0;
         else if (raw < -1.0) raw = -1.0;
         return (raw + 1.0) / 2.0;
     }
-
-    // Declared bounds must match the values actually returned. These mirror
-    // WinOnlyHeuristic's bounds so MCTS normalisation treats both identically.
     @Override
     public double minValue() {
         return 0.0;

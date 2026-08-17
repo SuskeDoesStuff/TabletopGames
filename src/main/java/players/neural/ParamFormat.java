@@ -5,17 +5,7 @@ import evaluation.optimisation.TunableParameters;
 import players.PlayerParameters;
 import players.mcts.MCTSParams;
 
-/**
- * Shared formatting helper for printing a player's parameters as:
- *
- *   PlayerName
- *       param: value
- *       param: value
- *       ...
- *
- * Used both by TunedTournament (up-front roster, before the run) and by
- * GameParamsLogger (first-appearance dump during the run).
- */
+// formatting for printing player settings during param logging
 public final class ParamFormat {
 
     private ParamFormat() {}

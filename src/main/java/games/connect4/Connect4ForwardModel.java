@@ -16,19 +16,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 
-/**
- * Connect4 forward model.
- *
- * Extends SequentialActionForwardModel for the game flow, and implements
- * ITreeActionSpace so that PyTAG (and the NeuralRolloutPlayer) can map
- * policy-network logits to legal actions via a fixed-shape action tree.
- *
- * Action tree layout: a flat tree with one leaf per column (gridSize children
- * of root). A column is marked legal (value=1) when it has at least one empty
- * cell; the leaf's action is SetGridValueAction at the lowest empty row of
- * that column. Leaf index = column index, so a network with `gridSize` output
- * logits maps directly onto the columns.
- */
+// Connect4 forward model that extends SequentialActionForwardModel and implements ITreeActionSpace so that PyTAG is able to train a PPO policy on Connect4
 public class Connect4ForwardModel extends SequentialActionForwardModel implements ITreeActionSpace {
 
     @Override
@@ -76,11 +64,6 @@ public class Connect4ForwardModel extends SequentialActionForwardModel implement
         super._afterAction(currentState, action);
     }
 
-    // -------------------------------------------------------------------
-    // ITreeActionSpace — used by PyTAG / NeuralRolloutPlayer for mapping
-    // network logits to legal actions.
-    // -------------------------------------------------------------------
-
     @Override
     public ActionTreeNode initActionTree(AbstractGameState gameState) {
         int gridSize = ((Connect4GameParameters) gameState.getGameParameters()).gridSize;
@@ -118,9 +101,6 @@ public class Connect4ForwardModel extends SequentialActionForwardModel implement
         return root;
     }
 
-    // -------------------------------------------------------------------
-    // Win/draw detection — unchanged from the original implementation.
-    // -------------------------------------------------------------------
 
     /**
      * Checks if the game ended.
