@@ -1,3 +1,21 @@
+Keshav's update: On the TAG side the weights are loaded, not exported. After export_weights.py has produced game_weights.txt on the PyTAG side, TAG reads that file directly when running a tournament. The weights path is passed as the third argument to TunedTournament:
+
+```
+  java -cp target/TAG.jar players.neural.TunedTournament \
+  <game> <paramsJson> <weights> <features> \
+  BUDGET_TIME <budget> <matchups> <nPlayers> <outDir>
+```
+for example,
+```
+java -cp target/TAG.jar players.neural.TunedTournament \
+  Connect4 json/players/gameSpecific/Connect4.json \
+  /path/to/game_weights.txt \
+  games.connect4.Connect4StateFeatures \
+  BUDGET_TIME 100 1000 2 metrics/connect4_run
+```
+The neural agents (NeuralMCTSPlayer, NeuralCriticMCTSPlayer, NeuralBothMCTSPlayer, NeuralRolloutPlayer) each take the same <weights> path and load it on construction. The file is parsed as JSON, so the export must be valid JSON containing the network's layer weights.
+
+
 # TAG: [Tabletop Games Framework](http://www.tabletopgames.ai/)
 
 [![license](https://img.shields.io/github/license/GAIGResearch/TabletopGames)](LICENSE)
