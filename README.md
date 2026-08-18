@@ -10,7 +10,7 @@ for example,
 java -cp target/TAG.jar players.neural.TunedTournament \
   Connect4 json/players/gameSpecific/Connect4.json \
   /path/to/game_weights.txt \
-  games.connect4.Connect4StateFeatures \
+  games.connect4.Connect4StateVector \
   BUDGET_TIME 100 1000 2 metrics/connect4_run
 ```
 The neural agents (NeuralMCTSPlayer, NeuralCriticMCTSPlayer, NeuralBothMCTSPlayer, NeuralRolloutPlayer) each take the same <weights> path and load it on construction. The file is parsed as JSON, so the export must be valid JSON containing the network's layer weights.
